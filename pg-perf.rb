@@ -1,22 +1,22 @@
-
-VERSIONS = ['9.1', '9.4']
+require 'ruby-standard-deviation'
+require 'hashie'
 
 class QueryParser
 
-  def initialize()
+  def initialize(versions)
+    @v1, @v2 = versions
     @by_sql = {}
     @by_model = {}
   end
 
   # Result structure: [Model, Query, Time]
 
-  def parse_file(version)
-    path = "./#{version}.txt"
+  def parse_file(version, path)
     queries_file = "./#{version}-queries.txt"
     File.open(path) do |file|
       File.open(queries_file, 'w') do |qfile|
         file.each_line do |line|
-          data = /^([^\s]+)\s+(?:Load\s+)?\((.+)ms\)\s+(.+)$/.match(line)
+          data = /^[^\s]+\s+([^\s]+)\s+(?:Load\s+)?\((.+)ms\)\s+(.+)$/.match(line)
           next if data.nil?
           if data[1] == 'SQL'
             type, table = parse_sql(data[3])
@@ -41,11 +41,11 @@ class QueryParser
     puts 'Performance Report by Model load'
     max_col_size = @by_model.keys.inject(0) {|s,v| v.size > s ? v.size : s}
     max_col_size = 5 if max_col_size < 5
-    table_width = max_col_size + 83
+    table_width = max_col_size + 109
     puts '=' * table_width
-    puts ' '.ljust(max_col_size) + ' |    Queries    | Minimum time  |  Maximum time   | Average time  | Time median'
-    puts '        Model        |' + '-' * (table_width - max_col_size - 2)
-    puts ' ' * max_col_size + ' |  9.1  |  9.4  |  9.1  |  9.4  |   9.1  |   9.4  |  9.1  |  9.4  |  9.1  |  9.4' 
+    puts ' '.ljust(max_col_size) + ' |   Queries count   |   Minimum time    |   Maximum time    | Average time  |  Time median  | St. deviation'
+    puts 'Model'.center(max_col_size)        +' |' + '-' * (table_width - max_col_size - 2)
+    puts ' ' * max_col_size + " |   #{@v1}   |   #{@v2}  " * 3 + " |  #{@v1}  |  #{@v2} " * 3
     puts '-' * table_width
     @by_model.keys.sort.each do |model_name|
       avg = {}
@@ -53,7 +53,8 @@ class QueryParser
       max = {}
       median = {}
       count = {}
-      VERSIONS.each do |v|
+      stdev = {}
+      [@v1, @v2].each do |v|
         t = @by_model[model_name][v]
         if t.nil?
           count[v] = '-'
@@ -61,25 +62,30 @@ class QueryParser
           max[v] = '-'
           avg[v] = '-'
           median[v] = '-'
+          std_dev[v] = '-'
         else
           count[v] = t.size.to_s
           min[v] = '%.2f' % t.min
           max[v] = '%.2f' % t.max
           avg[v] = '%.2f' % (t.inject(:+) / t.size)
           median[v] = '%.2f' % calc_median(t)
+          stdev[v] = '%.2f' % (t.stdev)
+          stdev[v] = t.size > 1 ? '%.2f' % (t.stdev) : '-'
         end
       end
       puts model_name.ljust(max_col_size) + ' | ' + \
-           count[VERSIONS[0]].rjust(5) + ' | ' + \
-           count[VERSIONS[1]].rjust(5) + ' | ' + \
-           min[VERSIONS[0]].rjust(5) + ' | ' + \
-           min[VERSIONS[1]].rjust(5) + ' | ' + \
-           max[VERSIONS[0]].rjust(6) + ' | ' + \
-           max[VERSIONS[1]].rjust(6) + ' | ' + \
-           avg[VERSIONS[0]].rjust(5) + ' | ' + \
-           avg[VERSIONS[1]].rjust(5) + ' | ' + \
-           median[VERSIONS[0]].rjust(5) + ' | ' + \
-           median[VERSIONS[1]].rjust(5)
+           count[@v1].rjust(7) + ' | ' + \
+           count[@v2].rjust(7) + ' | ' + \
+           min[@v1].rjust(7) + ' | ' + \
+           min[@v2].rjust(7) + ' | ' + \
+           max[@v1].rjust(7) + ' | ' + \
+           max[@v2].rjust(7) + ' | ' + \
+           avg[@v1].rjust(5) + ' | ' + \
+           avg[@v2].rjust(5) + ' | ' + \
+           median[@v1].rjust(5) + ' | ' + \
+           median[@v2].rjust(5) + ' | ' + \
+           stdev[@v1].rjust(5) + ' | ' + \
+           stdev[@v2].rjust(5)
     end
     puts '=' * table_width
   end
@@ -88,17 +94,18 @@ class QueryParser
     puts "\nPerformance Report by Raw SQL"
     max_col_size = @by_sql.keys.inject(0) {|s,v| v.size > s ? v.size : s} + 1
     max_col_size = 11 if max_col_size < 11
-    table_width = max_col_size + 83
+    table_width = max_col_size + 109
     puts '=' * table_width
-    puts ' '.ljust(max_col_size) + ' |    Queries    | Minimum time  |  Maximum time   | Average time  |  Time median'
-    puts '       Table        |' + '-' * (table_width - max_col_size - 2)
-    puts ' ' * max_col_size + ' |  9.1  |  9.4  |  9.1  |  9.4  |   9.1  |   9.4  |  9.1  |  9.4  |  9.1  |  9.4' 
+    puts ' '.ljust(max_col_size) + ' |   Queries count   |   Minimum time    |   Maximum time    | Average time  |  Time median  | St. deviation'
+    puts 'Table'.center(max_col_size)        +' |' + '-' * (table_width - max_col_size - 2)
+    puts ' ' * max_col_size + " |   #{@v1}   |   #{@v2}  " * 3 + " |  #{@v1}  |  #{@v2} " * 3
     puts '-' * table_width
     @by_sql.keys.sort.each do |table|
       avg = {}
       min = {}
       max = {}
       median = {}
+      stdev = {}
       count = {}
       table_row_written = false
       by_table = @by_sql[table]
@@ -108,7 +115,8 @@ class QueryParser
         max[query] ||= {}
         avg[query] ||= {}
         median[query] ||= {}
-        VERSIONS.each do |v|
+        stdev[query] ||= {}
+        [@v1, @v2].each do |v|
           times = data[v]
           if times.nil?
             count[query][v] = '-'
@@ -116,29 +124,33 @@ class QueryParser
             max[query][v] = '-'
             avg[query][v] = '-'
             median[query][v] = '-'
+            stdev[query][v] = '-'
           else
             count[query][v] = times.size.to_s
             min[query][v] = '%.2f' % times.min
             max[query][v] = '%.2f' % times.max
             avg[query][v] = '%.2f' % (times.inject(:+) / times.size)
             median[query][v] = '%.2f' % calc_median(times)
+            stdev[query][v] = times.size > 1 ? '%.2f' % (times.stdev) : '-'
           end
         end
         if !table_row_written
-          puts "#{table}:".ljust(max_col_size) + ' |       |       |       |       |        |        |       |       |       |'
+          puts "#{table}:".ljust(max_col_size) + " |         |        " * 3 + " |       |      " * 3
           table_row_written = true
         end
         puts "  - #{query}".ljust(max_col_size) + ' | ' + \
-             count[query][VERSIONS[0]].rjust(5) + ' | ' + \
-             count[query][VERSIONS[1]].rjust(5) + ' | ' + \
-             min[query][VERSIONS[0]].rjust(5) + ' | ' + \
-             min[query][VERSIONS[1]].rjust(5) + ' | ' + \
-             max[query][VERSIONS[0]].rjust(6) + ' | ' + \
-             max[query][VERSIONS[1]].rjust(6) + ' | ' + \
-             avg[query][VERSIONS[0]].rjust(5) + ' | ' + \
-             avg[query][VERSIONS[1]].rjust(5) + ' | ' + \
-             median[query][VERSIONS[0]].rjust(5) + ' | ' + \
-             median[query][VERSIONS[1]].rjust(5)
+             count[query][@v1].rjust(7) + ' | ' + \
+             count[query][@v2].rjust(7) + ' | ' + \
+             min[query][@v1].rjust(7) + ' | ' + \
+             min[query][@v2].rjust(7) + ' | ' + \
+             max[query][@v1].rjust(7) + ' | ' + \
+             max[query][@v2].rjust(7) + ' | ' + \
+             avg[query][@v1].rjust(5) + ' | ' + \
+             avg[query][@v2].rjust(5) + ' | ' + \
+             median[query][@v1].rjust(5) + ' | ' + \
+             median[query][@v2].rjust(5) + ' | ' + \
+             stdev[query][@v1].rjust(5) + ' | ' + \
+             stdev[query][@v2].rjust(5)
       end
     end
     puts '=' * table_width
@@ -176,7 +188,20 @@ class QueryParser
 end
 
 if __FILE__ == $0
-  qp = QueryParser.new
-  VERSIONS.each { |v| qp.parse_file(v) }
+  files = {}
+  ARGV.each do |arg|
+    version, path = arg.split('=')
+    if version && path
+      files[version] = path
+    end
+  end
+  if files.size < 2
+    puts "Please provide 2 input files in format: version=filepath"
+    exit 1
+  end
+  qp = QueryParser.new(files.keys)
+  files.each_pair do |version, path|
+    qp.parse_file(version, path)
+  end
   qp.report
 end

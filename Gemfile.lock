@@ -1,0 +1,15 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    hashie (3.4.0)
+    ruby-standard-deviation (2.0.0)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  hashie
+  ruby-standard-deviation
+
+BUNDLED WITH
+   1.10.6
